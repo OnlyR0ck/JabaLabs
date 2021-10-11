@@ -2,12 +2,14 @@ package com.fourthLab.server;
 
 import org.jetbrains.annotations.NotNull;
 
-import java.awt.*;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.net.*;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -15,6 +17,72 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 
 public class Server {
+
+    //region Nested types
+
+    private class ClientHandler implements Runnable {
+        private Socket clientSocket;
+
+        public ClientHandler(Socket socket) {
+            clientSocket = socket;
+        }
+
+        public void run() {
+            ObjectInputStream clientInput;
+            ObjectOutputStream clientOutput;
+
+            try
+            {
+                clientInput = new ObjectInputStream(clientSocket.getInputStream());
+                clientOutput = new ObjectOutputStream(clientSocket.getOutputStream());
+
+                String receivedMessage;
+                do {
+                    receivedMessage = (String) clientInput.readObject();
+
+                    Log(String.format("Message received: %s", receivedMessage));
+
+                    if (receivedMessage.equals("exit")) {
+                        break;
+                    }
+
+                    float answer = calculateTax(Integer.parseInt(receivedMessage));
+                    Log(String.format("Server output: %f", answer));
+                    clientOutput.writeObject(answer);
+                }
+                while (true);
+
+                if(clientSocket != null) {
+                    clientSocket.close();
+                }
+
+                clientInput.close();
+                clientOutput.close();
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+        }
+
+        private float calculateTax(int salary) throws Exception {
+
+            if (salary < 100000) {
+                return salary * 0.05f;
+            } else if (salary < 500000) {
+                return salary * 0.1f;
+            } else if (salary > 500000) {
+                return salary * 0.15f;
+            }
+            else
+            {
+                throw new Exception("Incorrect value!");
+            }
+        }
+    }
+
+    //endregion
+
     //region Fields
 
     private ServerSocket serverSocket;
@@ -68,10 +136,6 @@ public class Server {
     //region Public methods
 
     public void startTCPServer() throws IOException {
-
-        ObjectInputStream clientInput;
-        ObjectOutputStream clientOutput;
-
         try {
 
             serverSocket = new ServerSocket(port);
@@ -84,44 +148,37 @@ public class Server {
 
             Log(serverLog);
 
-            acceptedClientSocket = serverSocket.accept();
-            serverLog = String.format("Date: %s, Time: %s\n",
-                    LocalDate.now(),
-                    LocalTime.now());
-            serverLog += String.format("New connection: %s : %d",
-                    acceptedClientSocket.getLocalAddress(),
-                    acceptedClientSocket.getPort());
-            Log(serverLog);
-            clientInput = new ObjectInputStream(acceptedClientSocket.getInputStream());
-            clientOutput = new ObjectOutputStream(acceptedClientSocket.getOutputStream());
+            while(true)
+            {
+                acceptedClientSocket = serverSocket.accept();
 
-            String receivedMessage;
-            do {
-                receivedMessage = (String) clientInput.readObject();
+                serverLog = String.format("Date: %s, Time: %s\n",
+                        LocalDate.now(),
+                        LocalTime.now());
 
-                Log(String.format("Message received: %s", receivedMessage));
+                serverLog += String.format("New connection: %s : %d",
+                        acceptedClientSocket.getLocalAddress(),
+                        acceptedClientSocket.getPort());
+                Log(serverLog);
+                ClientHandler clientHandler = new ClientHandler(acceptedClientSocket);
+                new Thread(clientHandler).start();
 
-                if (receivedMessage.equals("exit")) {
-                    break;
-                }
-
-                float answer = calculateTax(Integer.parseInt(receivedMessage));
-                Log(String.format("Server output: %f", answer));
-                clientOutput.writeObject(answer);
             }
-            while (true);
+           /* Log("Shutting down...");
 
-            Log("Shutting down...");
-
-            clientInput.close();
-            clientOutput.close();
             acceptedClientSocket.close();
             serverSocket.close();
-            fileWriter.close();
+            fileWriter.close();*/
 
         } catch (Exception e) {
             e.printStackTrace();
             Log(e.getMessage());
+        }
+        finally {
+            if(serverSocket != null)
+            {
+                serverSocket.close();
+            }
         }
     }
 

@@ -7,7 +7,7 @@ public class Main {
         Server server;
         try {
             server = new Server(2525);
-            server.startUDPServer();
+            server.startTCPServer();
         } catch (IOException e) {
             e.printStackTrace();
         }
